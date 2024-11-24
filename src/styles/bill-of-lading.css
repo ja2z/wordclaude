@@ -1,0 +1,40 @@
+.bol-wrapper {
+    font-size: 12px;
+    line-height: 1.2;
+  }
+  
+  .bol-wrapper * {
+    font-family: Arial, sans-serif;
+  }
+  
+  .bol-wrapper h1,
+  .bol-wrapper h2,
+  .bol-wrapper h3,
+  .bol-wrapper h4,
+  .bol-wrapper h5,
+  .bol-wrapper h6 {
+    font-size: inherit;
+    font-weight: bold;
+  }
+  
+  .bol-wrapper table {
+    font-size: inherit;
+  }
+  
+  .bol-wrapper th,
+  .bol-wrapper td {
+    padding: 2px 4px;
+  }
+  
+  .bol-section-header {
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+    background-color: black;
+    color: white;
+    padding: 2px 0;
+  }
+  
+  .bol-label {
+    font-weight: bold;
+  }
