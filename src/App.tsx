@@ -1,19 +1,86 @@
 import { useMemo } from "react";
-import WordCloud, { WordCloudWord } from "./components/wordClaude";
+import WordCloud, { WordCloudWord, FontSizeConfig } from "./components/wordClaude";
 import "./App.css";
-import { client, useConfig, useElementData } from "@sigmacomputing/plugin";
+import { client, useConfig, useElementData, useVariable } from "@sigmacomputing/plugin";
 
+/**
+ * Configure the editor panel with necessary inputs
+ */
 client.config.configureEditorPanel([
   { name: "source", type: "element" },
   { name: "tokenize", type: "dropdown", values: ["Yes", "No"], defaultValue: "Yes" },
-  { name: "debug", type: "dropdown", values: ["True", "False"], defaultValue: "False" },
+  { name: "fontMinMax", type: "variable" },
+  { name: "scaleFactor", type: "variable" },
   { name: "text", type: "column", source: "source", allowMultiple: false },
   { name: "value", type: "column", source: "source", allowMultiple: false },
 ]);
 
+// Default values for font configuration
+const DEFAULT_FONT_CONFIG = {
+  min: 1,
+  max: 10
+};
+
+// Default value for scale factor
+const DEFAULT_SCALE_FACTOR = 1.2;
+
+/**
+ * Main App component that renders the WordCloud visualization
+ * Handles data transformation and configuration management
+ */
 function App() {
   const config = useConfig();
   const sourceData = useElementData(config.source);
+  
+  // Extract and validate scale factor from configuration
+  const scaleFactorConfig = useVariable(config.scaleFactor);
+  const scaleFactor = useMemo(() => {
+    // Early return if config is null or undefined
+    if (!scaleFactorConfig?.[0]?.defaultValue) {
+      return DEFAULT_SCALE_FACTOR;
+    }
+
+    // Type assertion to access the number value
+    const valueConfig = scaleFactorConfig[0].defaultValue as {
+      type: string;
+      value?: number;
+    };
+    
+    const value = Number(valueConfig.value ?? DEFAULT_SCALE_FACTOR);
+    
+    // Ensure the value is a valid positive number
+    return isNaN(value) || value <= 0 ? DEFAULT_SCALE_FACTOR : value;
+  }, [scaleFactorConfig]);
+
+  // Extract and validate font min/max from configuration
+  const fontMinMaxConfig = useVariable(config.fontMinMax);
+  const fontRange = useMemo(() => {
+    // Early return if config is null or undefined
+    if (!fontMinMaxConfig?.[0]?.defaultValue) {
+      return DEFAULT_FONT_CONFIG;
+    }
+
+    // Type assertion to access the number-range properties
+    const rangeConfig = fontMinMaxConfig[0].defaultValue as { 
+      type: string;
+      min?: number;
+      max?: number;
+    };
+    
+    // Extract min and max with default fallbacks
+    const minValue = Number(rangeConfig.min ?? DEFAULT_FONT_CONFIG.min);
+    const maxValue = Number(rangeConfig.max ?? DEFAULT_FONT_CONFIG.max);
+    
+    // Validate values and return defaults if invalid
+    if (isNaN(minValue) || isNaN(maxValue) || minValue >= maxValue) {
+      return DEFAULT_FONT_CONFIG;
+    }
+
+    return {
+      min: minValue,
+      max: maxValue
+    };
+  }, [fontMinMaxConfig]);
 
   // Transform data from Sigma format to WordCloud format
   const transformedWords = useMemo<WordCloudWord[]>(() => {
@@ -41,21 +108,36 @@ function App() {
     }));
   }, [sourceData, config.text, config.value]);
 
+  /**
+   * Handle click events on individual words
+   * Can be extended to implement custom interactions
+   */
   const handleWordClick = (word: WordCloudWord) => {
-    // You can implement your custom logic here
     console.log(`Clicked on word: ${word.text} with value: ${word.value}`);
-    // Example: Update some state, trigger an API call, etc.
+    // Implement additional click handling logic here
   };
 
-  // Get debug setting from client config and convert string to boolean
+  // Get debug setting from client config
   const debugMode = (client.config.getKey as any)("debug") === "True";
+
+  // Custom font configuration with dynamic scale factor and font range
+  const customFontConfig: FontSizeConfig = {
+    min: fontRange.min,
+    max: fontRange.max,
+    scaleFactor: scaleFactor,
+    wordCountScaling: {
+      enabled: true,
+      minScale: 0.4,
+      maxScale: 1.5,
+      threshold: 75
+    }
+  };
 
   return (
     <div className="fixed inset-0 w-full h-full">
       <WordCloud
         words={transformedWords}
-        minFontSize={1} // 3% of container height
-        maxFontSize={10} // 15% of container height
+        fontConfig={customFontConfig}
         scaleType="linear"
         debug={debugMode}
         onWordClick={handleWordClick}
