@@ -142,7 +142,6 @@ const WordCloud: React.FC<WordCloudProps> = ({
 
     return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
   };
-
   /**
    * Checks if a point is inside a bounding box using ray casting algorithm
    */
@@ -183,6 +182,7 @@ const WordCloud: React.FC<WordCloudProps> = ({
     // Check if one box is completely inside the other
     return isPointInsideBox(box1.points[0], box2) || isPointInsideBox(box2.points[0], box1);
   };
+
   /**
    * Calculates position along a spiral based on attempt number and word importance
    */
@@ -255,12 +255,25 @@ const WordCloud: React.FC<WordCloudProps> = ({
   }, []); // Empty dependency array since updateDimensions uses ref
 
   /**
-   * Calculates the actual font size based on relative size and container dimensions
+   * Calculates the actual font size based on relative size, container dimensions, and word count
+   * Uses a dynamic scaling factor based on the number of words to better utilize space
    */
-  const calculateActualFontSize = (relativeFontSize: number): number => {
+  const calculateActualFontSize = (
+    relativeFontSize: number,
+    wordCount: number
+  ): number => {
     // Use the smaller container dimension to ensure text fits in both directions
     const referenceSize = Math.min(width, height);
-    return (relativeFontSize / 100) * referenceSize;
+    
+    // Dynamic scaling based on word count
+    // Fewer words = larger scaling factor
+    const baseScale = relativeFontSize / 100;
+    const wordCountFactor = Math.max(0.5, Math.min(2, 10 / Math.sqrt(wordCount)));
+    
+    // Combine container size and word count scaling
+    const finalSize = baseScale * referenceSize * wordCountFactor;
+    
+    return finalSize;
   };
 
   /**
@@ -284,17 +297,14 @@ const WordCloud: React.FC<WordCloudProps> = ({
     const maxValue = Math.max(...sortedWords.map((w) => w.value));
     const minValue = Math.min(...sortedWords.map((w) => w.value));
 
-    // Calculate actual min and max font sizes based on container dimensions
-    const actualMinFontSize = calculateActualFontSize(minFontSize);
-    const actualMaxFontSize = calculateActualFontSize(maxFontSize);
-
     let placedCount = 0;
     const totalWords = sortedWords.length;
 
     sortedWords.forEach((word) => {
       const normalizedValue = normalizeValue(word.value, minValue, maxValue, scaleType);
-      const fontSize = actualMinFontSize + (actualMaxFontSize - actualMinFontSize) * normalizedValue;
-
+      const fontSize = calculateActualFontSize(minFontSize, sortedWords.length) +
+        (calculateActualFontSize(maxFontSize, sortedWords.length) - calculateActualFontSize(minFontSize, sortedWords.length)) * normalizedValue;
+      
       // Measure text dimensions
       ctx.font = `${fontSize}px Arial`;
       const metrics = ctx.measureText(word.text);

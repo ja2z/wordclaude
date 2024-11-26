@@ -54,8 +54,8 @@ function App() {
     <div className="fixed inset-0 w-full h-full">
       <WordCloud
         words={transformedWords}
-        minFontSize={2} // 3% of container height
-        maxFontSize={13} // 15% of container height
+        minFontSize={1} // 3% of container height
+        maxFontSize={10} // 15% of container height
         scaleType="linear"
         debug={debugMode}
         onWordClick={handleWordClick}
