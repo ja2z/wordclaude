@@ -58,6 +58,7 @@ interface WordCloudProps {
   packingConfig?: PackingConfig;
   scaleType?: ScaleType;
   debug?: boolean;
+  rotationMode?: "any" | "orthogonal";
   onWordClick?: (word: WordCloudWord) => void;
 }
 
@@ -291,7 +292,8 @@ const getSpiralPosition = (
   normalizedValue: number,
   width: number,
   height: number,
-  packingConfig: PackingConfig
+  packingConfig: PackingConfig,
+  rotationMode: "any" | "orthogonal" = "any"
 ): { x: number; y: number; rotation: number } => {
   const t = attempt / maxAttempts;
 
@@ -322,17 +324,23 @@ const getSpiralPosition = (
 
   // Determine rotation based on strategy
   let rotation = 0;
-  if (packingConfig.bruteForce) {
-    // Try different rotations based on progress
-    const rotationAttempts = [0, 45, 90, -45];
-    const rotationIndex = Math.floor(attempt / (maxAttempts / rotationAttempts.length));
-    rotation = rotationAttempts[rotationIndex] || 0;
-
-    // Add small random variation to avoid grid-like patterns
-    rotation += (Math.random() - 0.5) * 10;
+  if (rotationMode === "orthogonal") {
+    // Only use 0 or -90 degrees
+    rotation = Math.random() > 0.5 ? 0 : -90;
+    // Add tiny random variation to avoid perfect alignment
+    rotation += (Math.random() - 0.5) * 2;
   } else {
-    // Simple horizontal/vertical alternation with slight randomness
-    rotation = Math.random() > 0.5 ? 0 + (Math.random() - 0.5) * 5 : 90 + (Math.random() - 0.5) * 5;
+    if (packingConfig.bruteForce) {
+      // Try different rotations based on progress
+      const rotationAttempts = [0, 45, 90, -45];
+      const rotationIndex = Math.floor(attempt / (maxAttempts / rotationAttempts.length));
+      rotation = rotationAttempts[rotationIndex] || 0;
+      // Add small random variation to avoid grid-like patterns
+      rotation += (Math.random() - 0.5) * 10;
+    } else {
+      // Simple horizontal/vertical alternation with slight randomness
+      rotation = Math.random() > 0.5 ? 0 + (Math.random() - 0.5) * 5 : 90 + (Math.random() - 0.5) * 5;
+    }
   }
 
   return {
@@ -351,6 +359,7 @@ const processWords = (
   height: number,
   fontConfig: FontSizeConfig,
   packingConfig: PackingConfig,
+  rotationMode: "any" | "orthogonal" = "any",
   scaleType: ScaleType = "linear"
 ): ProcessedWord[] => {
   const placedWords: ProcessedWord[] = [];
@@ -392,7 +401,8 @@ const processWords = (
         normalizedValue,
         width,
         height,
-        packingConfig
+        packingConfig,
+        rotationMode
       );
 
       const spacing = getWordSpacing(
@@ -500,6 +510,7 @@ const WordCloud: React.FC<WordCloudProps> = ({
   fontConfig = DEFAULT_FONT_CONFIG,
   packingConfig = DEFAULT_PACKING_CONFIG,
   scaleType = "linear",
+  rotationMode = "any",
   debug = false,
   onWordClick,
 }) => {
@@ -551,7 +562,15 @@ const WordCloud: React.FC<WordCloudProps> = ({
   useEffect(() => {
     if (width && height) {
       const originalWordCount = words.length; // Store original count
-      const processed = processWords(words, width, height, fontConfig, packingConfig, scaleType);
+      const processed = processWords(
+        words,
+        width,
+        height,
+        fontConfig,
+        packingConfig,
+        rotationMode,
+        scaleType
+      );
 
       const attempts: { [key: string]: number } = {};
       words.forEach((word) => {
@@ -676,7 +695,7 @@ const WordCloud: React.FC<WordCloudProps> = ({
               onClick={() => setShowDebug(!showDebug)}
               className="px-3 py-1 bg-white border rounded shadow hover:bg-gray-50"
             >
-              Toggle Debug View
+              Show Bounding Boxes 
             </button>
             <div className="flex items-center gap-2">
               <span className="font-medium">Stats:</span>

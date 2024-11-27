@@ -74,6 +74,12 @@ client.config.configureEditorPanel([
   { name: "minWordLength", type: "variable" },
   { name: "fontMinMax", type: "variable" },
   { name: "scaleFactor", type: "variable" },
+  { name: "packingFactor", type: "variable" },
+  { name: "packingStrategy", type: "variable" },
+  { name: "packingMinSpacing", type: "variable" },
+  { name: "packingBruteForce", type: "variable" },
+  { name: "rotationMode", type: "variable" },
+  { name: "scaleType", type: "variable" },
   { name: "wordCountEnabled", type: "variable" },
   { name: "wordCountMinMaxScale", type: "variable" },
   { name: "wordCountThreshold", type: "variable" },
@@ -82,17 +88,18 @@ client.config.configureEditorPanel([
   { name: "value", type: "column", source: "source", allowMultiple: false },
 ]);
 
-const customPackingConfig: PackingConfig = {
-  factor: 0.8, // Controls overall spacing (0.5 = very tight, 2.0 = very loose)
-  strategy: "adaptive", // "uniform" or "adaptive" spacing based on word importance
-  minSpacing: 2, // Minimum pixels between words
-  bruteForce: true, // Tries multiple rotations for better fits
-};
-
 // Default values for font configuration
 const DEFAULT_FONT_CONFIG = {
   min: 1,
   max: 10,
+};
+
+// Default packing configuration values
+const DEFAULT_PACKING_CONFIG: PackingConfig = {
+  factor: 0.8,
+  strategy: "adaptive",
+  minSpacing: 2,
+  bruteForce: true,
 };
 
 // Default value for scale factor
@@ -108,6 +115,10 @@ const DEFAULT_WORD_COUNT_CONFIG = {
 
 // Default minimum word length
 const DEFAULT_MIN_WORD_LENGTH = 3;
+
+// Default values
+const DEFAULT_ROTATION_MODE = "orthogonal" as const;
+const DEFAULT_SCALE_TYPE = "linear" as const;
 
 /**
  * Main App component that renders the WordCloud visualization
@@ -126,6 +137,64 @@ function App() {
   const wordCountMinMaxScaleConfig = useVariable(config.wordCountMinMaxScale);
   const wordCountThresholdConfig = useVariable(config.wordCountThreshold);
   const debugConfig = useVariable(config.debug);
+  const packingFactorConfig = useVariable(config.packingFactor);
+  const packingStrategyConfig = useVariable(config.packingStrategy);
+  const packingMinSpacingConfig = useVariable(config.packingMinSpacing);
+  const packingBruteForceConfig = useVariable(config.packingBruteForce);
+  const rotationModeConfig = useVariable(config.rotationMode);
+  const scaleTypeConfig = useVariable(config.scaleType);
+
+    // Process rotation mode
+    const rotationMode = useMemo(() => {
+      const modeValue = (rotationModeConfig?.[0]?.defaultValue as { value?: string })?.value;
+      return (modeValue === "orthogonal" || modeValue === "any") 
+        ? modeValue 
+        : DEFAULT_ROTATION_MODE;
+    }, [rotationModeConfig]);
+  
+    // Process scale type
+    const scaleType = useMemo(() => {
+      const typeValue = (scaleTypeConfig?.[0]?.defaultValue as { value?: string })?.value;
+      return (typeValue === "linear" || typeValue === "logarithmic") 
+        ? typeValue 
+        : DEFAULT_SCALE_TYPE;
+    }, [scaleTypeConfig]);
+
+  // Process packing configuration
+  const packingConfig = useMemo(() => {
+    // Extract and validate factor
+    const factorValue = (packingFactorConfig?.[0]?.defaultValue as { value?: number })?.value;
+    const factor =
+      !isNaN(Number(factorValue)) && factorValue !== null
+        ? Number(factorValue)
+        : DEFAULT_PACKING_CONFIG.factor;
+
+    // Extract and validate strategy
+    const strategyValue = (packingStrategyConfig?.[0]?.defaultValue as { value?: string })?.value;
+    const strategy =
+      strategyValue === "uniform" || strategyValue === "adaptive"
+        ? strategyValue
+        : DEFAULT_PACKING_CONFIG.strategy;
+
+    // Extract and validate minSpacing
+    const minSpacingValue = (packingMinSpacingConfig?.[0]?.defaultValue as { value?: number })?.value;
+    const minSpacing =
+      !isNaN(Number(minSpacingValue)) && minSpacingValue !== null
+        ? Number(minSpacingValue)
+        : DEFAULT_PACKING_CONFIG.minSpacing;
+
+    // Extract and validate bruteForce
+    const bruteForceValue = (packingBruteForceConfig?.[0]?.defaultValue as { value?: boolean })?.value;
+    const bruteForce =
+      typeof bruteForceValue === "boolean" ? bruteForceValue : DEFAULT_PACKING_CONFIG.bruteForce;
+
+    return {
+      factor,
+      strategy,
+      minSpacing,
+      bruteForce,
+    } as PackingConfig;
+  }, [packingFactorConfig, packingStrategyConfig, packingMinSpacingConfig, packingBruteForceConfig]);
 
   // Process tokenize configuration
   const shouldTokenize = useMemo(() => {
@@ -279,9 +348,10 @@ function App() {
     <div className="fixed inset-0 w-full h-full">
       <WordCloud
         words={transformedWords}
+        rotationMode={rotationMode} // "orthogonal" or "any"
         fontConfig={customFontConfig}
-        packingConfig={customPackingConfig}
-        scaleType="linear"
+        packingConfig={packingConfig}
+        scaleType={scaleType} // "logarithmic" or "linear"
         debug={debug}
         onWordClick={handleWordClick}
       />
