@@ -3,6 +3,9 @@ import WordCloud, { WordCloudWord, FontSizeConfig, PackingConfig } from "./compo
 import "./App.css";
 import { client, useConfig, useElementData, useVariable } from "@sigmacomputing/plugin";
 
+// Maximum number of words to display in the cloud
+const MAX_WORDS = 200;
+
 // Common English stop words to filter out
 const STOP_WORDS = new Set([
   "a",
@@ -38,14 +41,27 @@ const STOP_WORDS = new Set([
 ]);
 
 /**
+ * Gets the top N items from an array of WordCloudWord based on value
+ * @param words Array of WordCloudWord items
+ * @param n Number of top items to return
+ * @returns Array of top N WordCloudWord items
+ */
+const getTopNItems = (words: WordCloudWord[], n: number): WordCloudWord[] => {
+  return [...words].sort((a, b) => b.value - a.value).slice(0, n);
+};
+
+/**
  * Tokenizes and cleans text by removing punctuation, numbers, and stop words
- * Filters out words shorter than the minimum length
+ * Filters out words shorter than the minimum length and handles null/undefined values
  * @param text Input text to process
  * @param minLength Minimum word length to include
  * @returns Array of cleaned tokens
  */
-const tokenizeText = (text: string, minLength: number): string[] => {
-  if (!text) return [];
+const tokenizeText = (text: string | null | undefined, minLength: number): string[] => {
+  // Handle null, undefined, or empty strings
+  if (!text || typeof text !== "string") {
+    return [];
+  }
 
   // Convert to lowercase and replace special characters with spaces
   const cleaned = text
@@ -119,7 +135,6 @@ const DEFAULT_MIN_WORD_LENGTH = 3;
 // Default values
 const DEFAULT_ROTATION_MODE = "orthogonal" as const;
 const DEFAULT_SCALE_TYPE = "linear" as const;
-
 /**
  * Main App component that renders the WordCloud visualization
  * Handles data transformation and configuration management
@@ -144,46 +159,38 @@ function App() {
   const rotationModeConfig = useVariable(config.rotationMode);
   const scaleTypeConfig = useVariable(config.scaleType);
 
-    // Process rotation mode
-    const rotationMode = useMemo(() => {
-      const modeValue = (rotationModeConfig?.[0]?.defaultValue as { value?: string })?.value;
-      return (modeValue === "orthogonal" || modeValue === "any") 
-        ? modeValue 
-        : DEFAULT_ROTATION_MODE;
-    }, [rotationModeConfig]);
-  
-    // Process scale type
-    const scaleType = useMemo(() => {
-      const typeValue = (scaleTypeConfig?.[0]?.defaultValue as { value?: string })?.value;
-      return (typeValue === "linear" || typeValue === "logarithmic") 
-        ? typeValue 
-        : DEFAULT_SCALE_TYPE;
-    }, [scaleTypeConfig]);
+  // Process rotation mode
+  const rotationMode = useMemo(() => {
+    const modeValue = (rotationModeConfig?.[0]?.defaultValue as { value?: string })?.value;
+    return modeValue === "orthogonal" || modeValue === "any" ? modeValue : DEFAULT_ROTATION_MODE;
+  }, [rotationModeConfig]);
+
+  // Process scale type
+  const scaleType = useMemo(() => {
+    const typeValue = (scaleTypeConfig?.[0]?.defaultValue as { value?: string })?.value;
+    return typeValue === "linear" || typeValue === "logarithmic" ? typeValue : DEFAULT_SCALE_TYPE;
+  }, [scaleTypeConfig]);
 
   // Process packing configuration
   const packingConfig = useMemo(() => {
-    // Extract and validate factor
     const factorValue = (packingFactorConfig?.[0]?.defaultValue as { value?: number })?.value;
     const factor =
       !isNaN(Number(factorValue)) && factorValue !== null
         ? Number(factorValue)
         : DEFAULT_PACKING_CONFIG.factor;
 
-    // Extract and validate strategy
     const strategyValue = (packingStrategyConfig?.[0]?.defaultValue as { value?: string })?.value;
     const strategy =
       strategyValue === "uniform" || strategyValue === "adaptive"
         ? strategyValue
         : DEFAULT_PACKING_CONFIG.strategy;
 
-    // Extract and validate minSpacing
     const minSpacingValue = (packingMinSpacingConfig?.[0]?.defaultValue as { value?: number })?.value;
     const minSpacing =
       !isNaN(Number(minSpacingValue)) && minSpacingValue !== null
         ? Number(minSpacingValue)
         : DEFAULT_PACKING_CONFIG.minSpacing;
 
-    // Extract and validate bruteForce
     const bruteForceValue = (packingBruteForceConfig?.[0]?.defaultValue as { value?: boolean })?.value;
     const bruteForce =
       typeof bruteForceValue === "boolean" ? bruteForceValue : DEFAULT_PACKING_CONFIG.bruteForce;
@@ -199,7 +206,7 @@ function App() {
   // Process tokenize configuration
   const shouldTokenize = useMemo(() => {
     const tokenizeValue = (tokenizeConfig?.[0]?.defaultValue as { value?: boolean })?.value;
-    return tokenizeValue ?? false; // Explicitly default to false
+    return tokenizeValue ?? false;
   }, [tokenizeConfig]);
 
   // Process minimum word length configuration
@@ -295,33 +302,77 @@ function App() {
     }
 
     if (!shouldTokenize) {
-      // When not tokenizing, filter out words shorter than minWordLength
-      return textArray
-        .map((text, index) => ({
-          text: String(text),
-          value: Number(valueArray[index]) || 0,
-        }))
-        .filter((word) => word.text.length >= minWordLength);
+      // When not tokenizing, filter out null/undefined values and words shorter than minWordLength
+      const filteredWords = textArray
+        .map((text, index) => {
+          // Skip null/undefined/empty values
+          if (!text || typeof text !== "string") {
+            return null;
+          }
+          const value = Number(valueArray[index]);
+          // Skip if value is not a valid number
+          if (isNaN(value)) {
+            // If there's no value provided, use a default value of 1
+            // This ensures each word appears once with equal weight
+            return {
+              text: String(text).trim(),
+              value: 1,
+            };
+          }
+          return {
+            text: String(text).trim(),
+            value: value,
+          };
+        })
+        .filter((word): word is WordCloudWord => word !== null && word.text.length >= minWordLength);
+
+      // Create a Map to deduplicate words and sum their values
+      const uniqueWords = new Map<string, number>();
+      filteredWords.forEach((word) => {
+        const currentValue = uniqueWords.get(word.text) || 0;
+        uniqueWords.set(word.text, currentValue + word.value);
+      });
+
+      // Convert back to array format
+      const deduplicatedWords = Array.from(uniqueWords.entries()).map(([text, value]) => ({
+        text,
+        value,
+      }));
+
+      return getTopNItems(deduplicatedWords, MAX_WORDS);
     }
 
-    // Tokenization enabled: process each text entry and create word frequency map
-    const wordFrequencyMap = new Map<string, number>();
+    // Tokenization enabled: process each text entry and sum weights
+    const wordWeights = new Map<string, number>();
 
     textArray.forEach((text, index) => {
-      const value = Number(valueArray[index]) || 0;
-      const tokens = tokenizeText(String(text), minWordLength);
+      const value = Number(valueArray[index]);
+      // Skip if value is not a valid number
+      if (isNaN(value)) {
+        return;
+      }
 
+      const tokens = tokenizeText(text, minWordLength);
+
+      // Skip empty token arrays
+      if (tokens.length === 0) {
+        return;
+      }
+
+      // Add full weight to each token
       tokens.forEach((token) => {
-        const currentValue = wordFrequencyMap.get(token) || 0;
-        wordFrequencyMap.set(token, currentValue + value);
+        const currentWeight = wordWeights.get(token) || 0;
+        wordWeights.set(token, currentWeight + value);
       });
     });
 
-    // Convert frequency map to word cloud format
-    return Array.from(wordFrequencyMap.entries()).map(([text, value]) => ({
+    // Convert accumulated weights to final WordCloudWord format
+    const words = Array.from(wordWeights.entries()).map(([text, weight]) => ({
       text,
-      value,
+      value: weight,
     }));
+
+    return getTopNItems(words, MAX_WORDS);
   }, [sourceData, config.text, config.value, shouldTokenize, minWordLength]);
 
   /**
@@ -348,10 +399,10 @@ function App() {
     <div className="fixed inset-0 w-full h-full">
       <WordCloud
         words={transformedWords}
-        rotationMode={rotationMode} // "orthogonal" or "any"
+        rotationMode={rotationMode}
         fontConfig={customFontConfig}
         packingConfig={packingConfig}
-        scaleType={scaleType} // "logarithmic" or "linear"
+        scaleType={scaleType}
         debug={debug}
         onWordClick={handleWordClick}
       />

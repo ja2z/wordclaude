@@ -328,7 +328,7 @@ const getSpiralPosition = (
     // Only use 0 or -90 degrees
     rotation = Math.random() > 0.5 ? 0 : -90;
     // Add tiny random variation to avoid perfect alignment
-    rotation += (Math.random() - 0.5) * 2;
+    // rotation += (Math.random() - 0.5) * 2;
   } else {
     if (packingConfig.bruteForce) {
       // Try different rotations based on progress
@@ -361,12 +361,13 @@ const processWords = (
   packingConfig: PackingConfig,
   rotationMode: "any" | "orthogonal" = "any",
   scaleType: ScaleType = "linear"
-): ProcessedWord[] => {
+): { words: ProcessedWord[]; attempts: { [key: string]: number } } => {
   const placedWords: ProcessedWord[] = [];
   const tempCanvas = document.createElement("canvas");
   const ctx = tempCanvas.getContext("2d");
+  const attempts: { [key: string]: number } = {};
 
-  if (!ctx) return [];
+  if (!ctx) return { words: [], attempts: {} };
 
   // Sort words by value for consistent layout
   const sortedWords = [...inputWords].sort((a, b) => b.value - a.value);
@@ -377,6 +378,7 @@ const processWords = (
   const center = { x: width / 2, y: height / 2 };
 
   sortedWords.forEach((word) => {
+    attempts[word.text] = 0; // Initialize attempts counter
     const normalizedValue = normalizeValue(word.value, minValue, maxValue, scaleType);
     const fontSize = calculateFontSize({ width, height }, sortedWords, fontConfig, normalizedValue);
 
@@ -387,16 +389,17 @@ const processWords = (
     const wordHeight = fontSize;
 
     let placed = false;
-    let attempts = 0;
+    let wordAttempts = 0;
     const maxAttempts = packingConfig.maxAttempts || 500;
     let bestPosition: { x: number; y: number; rotation: number } | null = null;
     let bestDistance = Infinity;
     let bestBox: BoundingBox | null = null;
 
     // Try to place the word
-    while (!placed && attempts < maxAttempts) {
+    while (!placed && wordAttempts < maxAttempts) {
+      attempts[word.text]++; // Increment attempts counter
       const position = getSpiralPosition(
-        attempts,
+        wordAttempts,
         maxAttempts,
         normalizedValue,
         width,
@@ -445,12 +448,12 @@ const processWords = (
         }
 
         // If we're close enough to center or running out of attempts, use this position
-        if (distance < width * 0.1 || attempts > maxAttempts * 0.8) {
+        if (distance < width * 0.1 || wordAttempts > maxAttempts * 0.8) {
           placed = true;
         }
       }
 
-      attempts++;
+      wordAttempts++;
     }
     // Use the best found position, or the last valid position if none better was found
     if (bestPosition && bestBox) {
@@ -464,7 +467,7 @@ const processWords = (
       });
     }
   });
-  return placedWords;
+  return { words: placedWords, attempts };
 };
 
 /**
@@ -562,7 +565,7 @@ const WordCloud: React.FC<WordCloudProps> = ({
   useEffect(() => {
     if (width && height) {
       const originalWordCount = words.length; // Store original count
-      const processed = processWords(
+      const { words: processed, attempts } = processWords(
         words,
         width,
         height,
@@ -571,11 +574,6 @@ const WordCloud: React.FC<WordCloudProps> = ({
         rotationMode,
         scaleType
       );
-
-      const attempts: { [key: string]: number } = {};
-      words.forEach((word) => {
-        attempts[word.text] = 0;
-      });
 
       setProcessedWords(processed);
       setPlacementAttempts(attempts);
@@ -695,7 +693,7 @@ const WordCloud: React.FC<WordCloudProps> = ({
               onClick={() => setShowDebug(!showDebug)}
               className="px-3 py-1 bg-white border rounded shadow hover:bg-gray-50"
             >
-              Show Bounding Boxes 
+              Show Bounding Boxes
             </button>
             <div className="flex items-center gap-2">
               <span className="font-medium">Stats:</span>
